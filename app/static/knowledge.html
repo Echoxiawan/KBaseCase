@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库管理 - AI测试用例生成工具</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>知识库管理</h1>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="/">用例生成</a></li>
+            <li><a href="/static/knowledge.html" class="active">知识库管理</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <div class="card card-hover">
+            <h2>上传文件到知识库</h2>
+            <form id="knowledge-upload-form">
+                <div class="form-group">
+                    <label for="knowledge-file">选择文件 (PDF, DOCX, MD)</label>
+                    <div class="upload-dropzone" id="knowledge-dropzone">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <p>拖放文件到此处，或点击选择文件</p>
+                        <input type="file" id="knowledge-file" name="file" accept=".pdf,.docx,.doc,.md" required style="display: none;">
+                    </div>
+                    <div id="selected-file-info" style="margin-top: 10px; display: none;">
+                        <p>已选择: <span id="selected-filename"></span></p>
+                    </div>
+                </div>
+                <button type="submit" class="button">
+                    <i class="fas fa-upload"></i> 上传到知识库
+                </button>
+            </form>
+            <div id="upload-progress" style="display: none;">
+                <p>上传并处理中，请稍候...</p>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <p id="knowledge-upload-status"></p>
+        </div>
+        
+        <div class="card">
+            <h2>知识库文件列表</h2>
+            
+            <div class="search-bar">
+                <div class="search-input">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="file-search" placeholder="搜索文件名...">
+                </div>
+                <select id="file-sort" class="sort-select">
+                    <option value="date-desc">按日期（新到旧）</option>
+                    <option value="date-asc">按日期（旧到新）</option>
+                    <option value="name-asc">按名称（A-Z）</option>
+                    <option value="name-desc">按名称（Z-A）</option>
+                    <option value="size-desc">按大小（大到小）</option>
+                    <option value="size-asc">按大小（小到大）</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <div class="filter-item active" data-filter="all">所有文件</div>
+                <div class="filter-item" data-filter="completed">已处理</div>
+                <div class="filter-item" data-filter="waiting">等待/处理中</div>
+                <div class="filter-item" data-filter="error">处理错误</div>
+            </div>
+            
+            <div id="files-container">
+                <div class="loader">
+                    <div></div><div></div><div></div><div></div>
+                </div>
+                <p class="text-center">加载中...</p>
+            </div>
+            
+            <div id="pagination-container"></div>
+        </div>
+    </div>
+    
+    <!-- 加载动画容器 -->
+    <div id="global-loader-container" class="loader-container">
+        <div class="loader">
+            <div></div><div></div><div></div><div></div>
+        </div>
+        <p id="loader-message" style="margin-top: 20px; color: #666;">处理中，请稍候...</p>
+    </div>
+    
+    <!-- Toast通知容器 -->
+    <div class="toast-container"></div>
+    
+    <script src="/static/js/components.js"></script>
+    <script src="/static/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化拖放上传
+            const dropzone = document.getElementById('knowledge-dropzone');
+            const fileInput = document.getElementById('knowledge-file');
+            const selectedFileInfo = document.getElementById('selected-file-info');
+            const selectedFilename = document.getElementById('selected-filename');
+            const uploadForm = document.getElementById('knowledge-upload-form');
+            const uploadProgress = document.getElementById('upload-progress');
+            const progressBar = uploadProgress.querySelector('.progress-bar');
+            
+            // 点击区域触发文件选择
+            dropzone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // 文件选择变化事件
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    selectedFilename.textContent = fileInput.files[0].name;
+                    selectedFileInfo.style.display = 'block';
+                    dropzone.classList.add('active');
+                } else {
+                    selectedFileInfo.style.display = 'none';
+                    dropzone.classList.remove('active');
+                }
+            });
+            
+            // 初始化拖放功能
+            UI.DropZone.init(dropzone, (files) => {
+                if (files.length > 0) {
+                    // 设置文件到输入框
+                    fileInput.files = files;
+                    
+                    // 触发change事件
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                }
+            });
+            
+            // 提交表单
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // 验证表单
+                if (!fileInput.files.length) {
+                    UI.Toast.error('请选择要上传的文件');
+                    return;
+                }
+                
+                // 显示进度条
+                uploadForm.style.display = 'none';
+                uploadProgress.style.display = 'block';
+                
+                // 创建FormData对象
+                const formData = new FormData(uploadForm);
+                
+                // 显示加载动画
+                UI.Loader.show('正在处理文件并添加到知识库，这可能需要一些时间...');
+                
+                // 模拟上传进度
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 5;
+                    if (progress > 90) {
+                        clearInterval(progressInterval);
+                        progress = 90;
+                    }
+                    progressBar.style.width = `${progress}%`;
+                }, 500);
+                
+                // 发送请求
+                fetch('/api/knowledge/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    
+                    if (!response.ok) {
+                        throw new Error('上传失败: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // 隐藏加载动画
+                    UI.Loader.hide();
+                    
+                    // 显示成功通知
+                    UI.Toast.success('文件已成功添加到知识库！');
+                    
+                    // 重置表单
+                    uploadForm.reset();
+                    uploadForm.style.display = 'block';
+                    uploadProgress.style.display = 'none';
+                    selectedFileInfo.style.display = 'none';
+                    dropzone.classList.remove('active');
+                    
+                    // 重新加载文件列表
+                    loadKnowledgeFiles();
+                })
+                .catch(error => {
+                    console.error('上传失败:', error);
+                    
+                    // 隐藏加载动画
+                    UI.Loader.hide();
+                    
+                    // 显示错误通知
+                    UI.Toast.error('上传失败: ' + error.message);
+                    
+                    // 重置进度条和表单
+                    uploadForm.style.display = 'block';
+                    uploadProgress.style.display = 'none';
+                });
+            });
+            
+            // 初始化搜索和筛选
+            const searchInput = document.getElementById('file-search');
+            const sortSelect = document.getElementById('file-sort');
+            const filterButtons = document.querySelectorAll('.filter-item');
+            
+            // 全局文件数据
+            window.fileData = {
+                files: [],
+                filteredFiles: [],
+                currentPage: 1,
+                itemsPerPage: 10,
+                currentFilter: 'all',
+                currentSort: 'date-desc',
+                searchQuery: ''
+            };
+            
+            // 搜索事件
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    window.fileData.searchQuery = searchInput.value.trim().toLowerCase();
+                    window.fileData.currentPage = 1;  // 重置页码
+                    applyFileFilters();
+                });
+            }
+            
+            // 排序事件
+            if (sortSelect) {
+                sortSelect.addEventListener('change', () => {
+                    window.fileData.currentSort = sortSelect.value;
+                    applyFileFilters();
+                });
+            }
+            
+            // 筛选事件
+            if (filterButtons.length) {
+                filterButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        filterButtons.forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+                        window.fileData.currentFilter = button.getAttribute('data-filter');
+                        window.fileData.currentPage = 1;  // 重置页码
+                        applyFileFilters();
+                    });
+                });
+            }
+            
+            // 应用文件筛选和排序
+            function applyFileFilters() {
+                const data = window.fileData;
+                let filtered = [...data.files];
+                
+                // 应用搜索
+                if (data.searchQuery) {
+                    filtered = filtered.filter(file => 
+                        file.name.toLowerCase().includes(data.searchQuery)
+                    );
+                }
+                
+                // 应用筛选
+                if (data.currentFilter !== 'all') {
+                    if (data.currentFilter === 'completed') {
+                        filtered = filtered.filter(file => file.indexing_status === 'completed');
+                    } else if (data.currentFilter === 'waiting') {
+                        filtered = filtered.filter(file => 
+                            file.indexing_status === 'waiting' || 
+                            file.indexing_status === 'indexing'
+                        );
+                    } else if (data.currentFilter === 'error') {
+                        filtered = filtered.filter(file => file.indexing_status === 'error');
+                    }
+                }
+                
+                // 应用排序
+                switch (data.currentSort) {
+                    case 'date-asc':
+                        filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                        break;
+                    case 'date-desc':
+                        filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        break;
+                    case 'name-asc':
+                        filtered.sort((a, b) => a.name.localeCompare(b.name));
+                        break;
+                    case 'name-desc':
+                        filtered.sort((a, b) => b.name.localeCompare(a.name));
+                        break;
+                    case 'size-asc':
+                        filtered.sort((a, b) => {
+                            const sizeA = a.data_source_detail_dict?.upload_file?.size || 0;
+                            const sizeB = b.data_source_detail_dict?.upload_file?.size || 0;
+                            return sizeA - sizeB;
+                        });
+                        break;
+                    case 'size-desc':
+                        filtered.sort((a, b) => {
+                            const sizeA = a.data_source_detail_dict?.upload_file?.size || 0;
+                            const sizeB = b.data_source_detail_dict?.upload_file?.size || 0;
+                            return sizeB - sizeA;
+                        });
+                        break;
+                }
+                
+                // 保存筛选后的结果
+                data.filteredFiles = filtered;
+                
+                // 渲染文件列表
+                renderFiles();
+            }
+            
+            // 渲染文件列表
+            function renderFiles() {
+                const data = window.fileData;
+                const filesContainer = document.getElementById('files-container');
+                const paginationContainer = document.getElementById('pagination-container');
+                
+                if (!filesContainer) return;
+                
+                // 计算分页
+                const totalPages = Math.ceil(data.filteredFiles.length / data.itemsPerPage);
+                const start = (data.currentPage - 1) * data.itemsPerPage;
+                const end = start + data.itemsPerPage;
+                const paginatedFiles = data.filteredFiles.slice(start, end);
+                
+                // 清空容器
+                filesContainer.innerHTML = '';
+                
+                // 如果没有文件
+                if (data.filteredFiles.length === 0) {
+                    filesContainer.innerHTML = '<p class="text-center">没有找到匹配的文件</p>';
+                    paginationContainer.innerHTML = '';
+                    return;
+                }
+                
+                // 创建文件列表
+                const fileList = document.createElement('ul');
+                fileList.className = 'file-list';
+                
+                paginatedFiles.forEach(file => {
+                    // 获取文件类型
+                    let fileType = 'unknown';
+                    if (file.data_source_type === 'upload_file' && file.data_source_detail_dict && file.data_source_detail_dict.upload_file) {
+                        fileType = file.data_source_detail_dict.upload_file.extension || 'unknown';
+                    }
+                    
+                    const fileIcon = getFileIcon(fileType);
+                    
+                    // 获取文件大小
+                    let fileSize = 0;
+                    if (file.data_source_detail_dict && file.data_source_detail_dict.upload_file) {
+                        fileSize = file.data_source_detail_dict.upload_file.size || 0;
+                    }
+                    
+                    // 获取文件状态
+                    const status = file.indexing_status || 'unknown';
+                    const statusText = status === 'completed' ? '已完成' : 
+                                       status === 'waiting' ? '等待中' : 
+                                       status === 'indexing' ? '处理中' : 
+                                       status === 'error' ? '错误' : status;
+                    
+                    // 创建状态标签
+                    const statusClass = `status-${status}`;
+                    const loadingClass = status === 'indexing' ? 'loading-dots' : '';
+                    const statusBadge = `<span class="status-badge ${statusClass} ${loadingClass}">${statusText}</span>`;
+                    
+                    // 创建文件项
+                    const listItem = document.createElement('li');
+                    listItem.className = 'file-item card-hover';
+                    listItem.innerHTML = `
+                        <div class="file-info">
+                            <div class="file-icon">${fileIcon}</div>
+                            <div>
+                                <div class="file-name">
+                                    ${file.name}
+                                    ${statusBadge}
+                                </div>
+                                <div class="file-meta">
+                                    <span><i class="fas fa-file"></i> 类型: ${fileType}</span>
+                                    <span><i class="fas fa-weight"></i> 大小: ${formatFileSize(fileSize)}</span>
+                                    <span><i class="far fa-clock"></i> 上传时间: ${formatDateTime(file.created_at)}</span>
+                                    <span><i class="fas fa-info-circle"></i> 状态: ${statusText}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="deleteKnowledgeFile('${file.id}')" class="button danger">
+                            <i class="fas fa-trash-alt"></i> 删除
+                        </button>
+                    `;
+                    
+                    fileList.appendChild(listItem);
+                });
+                
+                filesContainer.appendChild(fileList);
+                
+                // 创建分页
+                UI.Pagination.create(
+                    paginationContainer, 
+                    data.filteredFiles.length, 
+                    data.itemsPerPage, 
+                    data.currentPage, 
+                    (page) => {
+                        data.currentPage = page;
+                        renderFiles();
+                    }
+                );
+            }
+            
+            // 重载loadKnowledgeFiles函数
+            window.loadKnowledgeFiles = function() {
+                const filesContainer = document.getElementById('files-container');
+                if (!filesContainer) return;
+                
+                // 显示加载中
+                filesContainer.innerHTML = `
+                    <div class="loader">
+                        <div></div><div></div><div></div><div></div>
+                    </div>
+                    <p class="text-center">加载中...</p>
+                `;
+                
+                // 请求文件列表
+                fetch('/api/knowledge/files')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('加载知识库文件失败: ' + response.statusText);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('知识库文件数据:', data); // 调试输出
+                        
+                        // 调试时间格式
+                        if (data.data && data.data.length > 0) {
+                            const firstFile = data.data[0];
+                            console.log('文件时间格式:', {
+                                'created_at原始值': firstFile.created_at,
+                                'created_at类型': typeof firstFile.created_at,
+                                '格式化后': formatDateTime(firstFile.created_at),
+                                'Unix时间戳转换': new Date(firstFile.created_at * 1000).toLocaleString('zh-CN'),
+                                '直接使用new Date()': new Date(firstFile.created_at).toLocaleString('zh-CN')
+                            });
+                        }
+                        
+                        if (!data.data || data.data.length === 0) {
+                            filesContainer.innerHTML = '<p class="text-center">知识库中暂无文件，请上传文件。</p>';
+                            return;
+                        }
+                        
+                        // 保存文件数据
+                        window.fileData.files = data.data;
+                        
+                        // 应用筛选
+                        applyFileFilters();
+                    })
+                    .catch(error => {
+                        console.error('加载知识库文件失败:', error);
+                        filesContainer.innerHTML = `<p class="text-center">加载知识库文件失败: ${error.message}</p>`;
+                        
+                        // 显示错误通知
+                        UI.Toast.error('加载知识库文件失败: ' + error.message);
+                    });
+            };
+            
+            // 重载删除知识库文件函数
+            window.deleteKnowledgeFile = function(fileId) {
+                UI.Modal.confirm(
+                    '确定要删除此文件吗？此操作不可撤销。',
+                    () => {
+                        // 显示加载动画
+                        UI.Loader.show('正在删除文件...');
+                        
+                        // 请求删除
+                        fetch(`/api/knowledge/delete/${fileId}`, {
+                            method: 'DELETE'
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('删除失败: ' + response.statusText);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            // 隐藏加载动画
+                            UI.Loader.hide();
+                            
+                            // 显示成功通知
+                            UI.Toast.success('文件已成功删除');
+                            
+                            // 重新加载文件列表
+                            loadKnowledgeFiles();
+                        })
+                        .catch(error => {
+                            console.error('删除失败:', error);
+                            
+                            // 隐藏加载动画
+                            UI.Loader.hide();
+                            
+                            // 显示错误通知
+                            UI.Toast.error('删除失败: ' + error.message);
+                        });
+                    },
+                    null,
+                    '确认删除'
+                );
+            };
+            
+            // 初始化加载文件
+            loadKnowledgeFiles();
+        });
+    </script>
+</body>
+</html> 

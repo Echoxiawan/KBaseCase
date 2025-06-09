@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试用例详情 - AI测试用例生成工具</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>测试用例详情</h1>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="/">用例生成</a></li>
+            <li><a href="/static/knowledge.html">知识库管理</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <div class="card batch-header">
+            <div class="batch-info">
+                <h2 id="batch-name">批次名称</h2>
+                <p id="batch-description">批次描述</p>
+            </div>
+            <div class="batch-actions">
+                <button onclick="exportBatch(new URLSearchParams(window.location.search).get('batch_id'))" class="button">
+                    <i class="fas fa-file-export"></i> 导出Excel
+                </button>
+                <button onclick="window.location.href='/'" class="button">
+                    <i class="fas fa-arrow-left"></i> 返回首页
+                </button>
+            </div>
+        </div>
+        
+        <div class="card batch-stats">
+            <div class="stat-item">
+                <div class="stat-value" id="total-count">0</div>
+                <div class="stat-label">总用例数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="reviewed-count">0</div>
+                <div class="stat-label">已审核</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="approved-count">0</div>
+                <div class="stat-label">已通过</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="rejected-count">0</div>
+                <div class="stat-label">已拒绝</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="batch-operations">
+                <h2>测试用例列表</h2>
+                <div class="operations-buttons">
+                    <button id="select-all-btn" class="button small">全选</button>
+                    <button id="deselect-all-btn" class="button small" disabled>取消全选</button>
+                    <button id="batch-approve-btn" class="button small success" disabled>批量通过</button>
+                    <button id="batch-reject-btn" class="button small danger" disabled>批量拒绝</button>
+                </div>
+            </div>
+            
+            <div class="search-bar">
+                <div class="search-input">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="testcase-search" placeholder="搜索测试用例标题或描述...">
+                </div>
+                <select id="testcase-sort" class="sort-select">
+                    <option value="title-asc">按标题（A-Z）</option>
+                    <option value="title-desc">按标题（Z-A）</option>
+                    <option value="status-asc">按状态（待审核优先）</option>
+                    <option value="status-desc">按状态（已审核优先）</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <div class="filter-item active" data-filter="all">所有用例</div>
+                <div class="filter-item" data-filter="pending">待审核</div>
+                <div class="filter-item" data-filter="approved">已通过</div>
+                <div class="filter-item" data-filter="rejected">已拒绝</div>
+            </div>
+            
+            <div id="test-cases-container">
+                <div class="loader">
+                    <div></div><div></div><div></div><div></div>
+                </div>
+                <p class="text-center">加载中...</p>
+            </div>
+            
+            <div id="pagination-container"></div>
+        </div>
+    </div>
+    
+    <!-- 加载动画容器 -->
+    <div id="global-loader-container" class="loader-container">
+        <div class="loader">
+            <div></div><div></div><div></div><div></div>
+        </div>
+        <p id="loader-message" style="margin-top: 20px; color: #666;">处理中，请稍候...</p>
+    </div>
+    
+    <!-- Toast通知容器 -->
+    <div class="toast-container"></div>
+    
+    <script src="/static/js/components.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html> 

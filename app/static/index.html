@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI测试用例生成工具</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>AI测试用例生成工具</h1>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="/" class="active">用例生成</a></li>
+            <li><a href="/static/knowledge.html">知识库管理</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <div class="card card-hover">
+            <h2>上传文档生成测试用例</h2>
+            <form id="upload-form">
+                <div class="form-group">
+                    <label for="batch-name">批次名称</label>
+                    <input type="text" id="batch-name" name="batch_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="batch-description">批次描述</label>
+                    <textarea id="batch-description" name="batch_description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="case-count">期望生成的测试用例数量</label>
+                    <input type="number" id="case-count" name="case_count" min="1" value="10">
+                    <small>注意：实际生成的用例数量可能会根据需求文档内容有所调整</small>
+                </div>
+                <div class="form-group">
+                    <label for="document-file">选择文档 (PDF, DOCX, MD)</label>
+                    <div class="upload-dropzone" id="document-dropzone">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <p>拖放文件到此处，或点击选择多个文件</p>
+                        <input type="file" id="document-file" name="file" accept=".pdf,.docx,.doc,.md" multiple required style="display: none;">
+                    </div>
+                    <div id="selected-file-info" style="margin-top: 10px; display: none;">
+                        <p>已选择文件：</p>
+                        <div class="selected-files-counter"></div>
+                        <ul id="selected-files-list"></ul>
+                    </div>
+                </div>
+                <button type="submit" class="button">
+                    <i class="fas fa-upload"></i> 上传并生成测试用例
+                </button>
+            </form>
+            <div id="upload-progress" style="display: none;">
+                <p>上传并处理中，请稍候...</p>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>测试用例批次</h2>
+            
+            <div class="search-bar">
+                <div class="search-input">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="batch-search" placeholder="搜索批次名称或描述...">
+                </div>
+                <select id="batch-sort" class="sort-select">
+                    <option value="date-desc">按日期（新到旧）</option>
+                    <option value="date-asc">按日期（旧到新）</option>
+                    <option value="name-asc">按名称（A-Z）</option>
+                    <option value="name-desc">按名称（Z-A）</option>
+                    <option value="count-desc">按用例数量（多到少）</option>
+                    <option value="count-asc">按用例数量（少到多）</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <div class="filter-item active" data-filter="all">所有批次</div>
+                <div class="filter-item" data-filter="recent">最近7天</div>
+                <div class="filter-item" data-filter="reviewed">已全部审核</div>
+                <div class="filter-item" data-filter="pending">待审核</div>
+            </div>
+            
+            <div id="batches-container">
+                <div class="loader">
+                    <div></div><div></div><div></div><div></div>
+                </div>
+                <p class="text-center">加载中...</p>
+            </div>
+            
+            <div id="pagination-container"></div>
+        </div>
+    </div>
+    
+    <!-- 加载动画容器 -->
+    <div id="global-loader-container" class="loader-container">
+        <div class="loader">
+            <div></div><div></div><div></div><div></div>
+        </div>
+        <p id="loader-message" style="margin-top: 20px; color: #666;">处理中，请稍候...</p>
+    </div>
+    
+    <!-- Toast通知容器 -->
+    <div class="toast-container"></div>
+    
+    <script src="/static/js/components.js"></script>
+    <script src="/static/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化拖放上传
+            const dropzone = document.getElementById('document-dropzone');
+            const fileInput = document.getElementById('document-file');
+            const selectedFileInfo = document.getElementById('selected-file-info');
+            const selectedFilesList = document.getElementById('selected-files-list');
+            
+            // 点击区域触发文件选择
+            dropzone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // 文件选择变化事件
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    // 清空文件列表
+                    selectedFilesList.innerHTML = '';
+                    
+                    // 显示所有选中文件
+                    for (let i = 0; i < fileInput.files.length; i++) {
+                        const file = fileInput.files[i];
+                        const li = document.createElement('li');
+                        li.textContent = `${file.name} (${formatFileSize(file.size)})`;
+                        selectedFilesList.appendChild(li);
+                    }
+                    
+                    // 显示选中文件数量
+                    const fileCountText = document.createElement('p');
+                    fileCountText.className = 'file-count';
+                    const fileText = fileInput.files.length > 1 ? '个文件' : '个文件';
+                    fileCountText.textContent = `已选择 ${fileInput.files.length} ${fileText}`;
+                    
+                    // 更新文件计数器
+                    const fileCounter = document.querySelector('.selected-files-counter');
+                    if (fileCounter) {
+                        fileCounter.innerHTML = fileCountText.outerHTML;
+                    } else {
+                        selectedFilesList.prepend(fileCountText);
+                    }
+                    
+                    selectedFileInfo.style.display = 'block';
+                    dropzone.classList.add('active');
+                } else {
+                    selectedFileInfo.style.display = 'none';
+                    dropzone.classList.remove('active');
+                }
+            });
+            
+            // 初始化拖放功能
+            UI.DropZone.init(dropzone, (files) => {
+                if (files.length > 0) {
+                    // 创建 DataTransfer 对象
+                    const dataTransfer = new DataTransfer();
+                    
+                    // 添加所有拖放的文件
+                    for (let i = 0; i < files.length; i++) {
+                        dataTransfer.items.add(files[i]);
+                    }
+                    
+                    // 设置文件到输入框
+                    fileInput.files = dataTransfer.files;
+                    
+                    // 触发change事件
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                }
+            });
+            
+            // 初始化上传表单提交
+            const uploadForm = document.getElementById('upload-form');
+            const uploadProgress = document.getElementById('upload-progress');
+            const progressBar = uploadProgress.querySelector('.progress-bar');
+            
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // 验证表单
+                if (!fileInput.files.length) {
+                    UI.Toast.error('请选择要上传的文件');
+                    return;
+                }
+                
+                // 显示进度条
+                uploadForm.style.display = 'none';
+                uploadProgress.style.display = 'block';
+                
+                // 创建FormData对象
+                const formData = new FormData(uploadForm);
+                
+                // 显示加载动画
+                UI.Loader.show('正在处理文档并生成测试用例，这可能需要一些时间...');
+                
+                // 模拟上传进度
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 5;
+                    if (progress > 90) {
+                        clearInterval(progressInterval);
+                        progress = 90;
+                    }
+                    progressBar.style.width = `${progress}%`;
+                }, 500);
+                
+                // 发送请求
+                fetch('/api/testcase/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    
+                    if (!response.ok) {
+                        throw new Error('上传失败: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // 隐藏加载动画
+                    UI.Loader.hide();
+                    
+                    // 显示成功通知
+                    UI.Toast.success('测试用例生成成功！');
+                    
+                    // 重置表单
+                    uploadForm.reset();
+                    uploadForm.style.display = 'block';
+                    uploadProgress.style.display = 'none';
+                    selectedFileInfo.style.display = 'none';
+                    dropzone.classList.remove('active');
+                    
+                    // 重新加载批次列表
+                    loadTestCaseBatches();
+                    
+                    // 跳转到测试用例详情页面
+                    setTimeout(() => {
+                        window.location.href = `/static/testcase.html?batch_id=${data.batch_id}`;
+                    }, 1000);
+                })
+                .catch(error => {
+                    console.error('上传失败:', error);
+                    
+                    // 隐藏加载动画
+                    UI.Loader.hide();
+                    
+                    // 显示错误通知
+                    UI.Toast.error('上传失败: ' + error.message);
+                    
+                    // 重置进度条和表单
+                    uploadForm.style.display = 'block';
+                    uploadProgress.style.display = 'none';
+                });
+            });
+            
+            // 初始化搜索和筛选
+            const searchInput = document.getElementById('batch-search');
+            const sortSelect = document.getElementById('batch-sort');
+            const filterButtons = document.querySelectorAll('.filter-item');
+            
+            let batches = [];
+            let filteredBatches = [];
+            let currentPage = 1;
+            const itemsPerPage = 5;
+            
+            // 批次搜索函数
+            const searchBatches = (query) => {
+                if (!query) {
+                    return batches;
+                }
+                
+                query = query.toLowerCase();
+                return batches.filter(batch => 
+                    batch.name.toLowerCase().includes(query) || 
+                    (batch.description && batch.description.toLowerCase().includes(query))
+                );
+            };
+            
+            // 批次筛选函数
+            const filterBatches = (filter) => {
+                if (filter === 'all') {
+                    return batches;
+                }
+                
+                const now = new Date();
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(now.getDate() - 7);
+                
+                if (filter === 'recent') {
+                    return batches.filter(batch => {
+                        const batchDate = new Date(batch.created_at);
+                        return batchDate >= sevenDaysAgo;
+                    });
+                } else if (filter === 'reviewed') {
+                    // 假设有reviewed_count和total_count字段
+                    return batches.filter(batch => 
+                        batch.reviewed_count && batch.total_count && 
+                        batch.reviewed_count === batch.total_count
+                    );
+                } else if (filter === 'pending') {
+                    // 假设有reviewed_count和total_count字段
+                    return batches.filter(batch => 
+                        !batch.reviewed_count || 
+                        (batch.total_count && batch.reviewed_count < batch.total_count)
+                    );
+                }
+                
+                return batches;
+            };
+            
+            // 批次排序函数
+            const sortBatches = (batches, sortBy) => {
+                const sorted = [...batches];
+                
+                switch (sortBy) {
+                    case 'date-asc':
+                        return sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                    case 'date-desc':
+                        return sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    case 'name-asc':
+                        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+                    case 'name-desc':
+                        return sorted.sort((a, b) => b.name.localeCompare(a.name));
+                    case 'count-asc':
+                        return sorted.sort((a, b) => a.test_case_count - b.test_case_count);
+                    case 'count-desc':
+                        return sorted.sort((a, b) => b.test_case_count - a.test_case_count);
+                    default:
+                        return sorted;
+                }
+            };
+            
+            // 渲染批次列表
+            const renderBatches = (batches) => {
+                const batchesContainer = document.getElementById('batches-container');
+                const paginationContainer = document.getElementById('pagination-container');
+                
+                // 计算分页
+                const totalPages = Math.ceil(batches.length / itemsPerPage);
+                const start = (currentPage - 1) * itemsPerPage;
+                const end = start + itemsPerPage;
+                const paginatedBatches = batches.slice(start, end);
+                
+                // 清空容器
+                batchesContainer.innerHTML = '';
+                
+                // 如果没有批次
+                if (batches.length === 0) {
+                    batchesContainer.innerHTML = '<p class="text-center">没有找到匹配的测试用例批次</p>';
+                    paginationContainer.innerHTML = '';
+                    return;
+                }
+                
+                // 创建批次列表
+                let html = '<div class="batch-list">';
+                paginatedBatches.forEach(batch => {
+                    const createdDate = new Date(batch.created_at);
+                    const isRecent = (new Date() - createdDate) < (7 * 24 * 60 * 60 * 1000);
+                    
+                    html += `
+                        <div class="card card-hover">
+                            <div class="batch-header">
+                                <h3>${batch.name} ${isRecent ? '<span class="badge new-badge">新</span>' : ''}</h3>
+                                <div class="batch-actions">
+                                    <button onclick="viewBatch(${batch.id})" class="button">
+                                        <i class="fas fa-eye"></i> 查看
+                                    </button>
+                                    <button onclick="exportBatch(${batch.id})" class="button success">
+                                        <i class="fas fa-file-export"></i> 导出
+                                    </button>
+                                    <button onclick="deleteBatch(${batch.id})" class="button danger">
+                                        <i class="fas fa-trash-alt"></i> 删除
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="batch-info">
+                                <p>${batch.description || '无描述'}</p>
+                                <div class="batch-meta">
+                                    <span><i class="fas fa-clipboard-list"></i> 测试用例数量: ${batch.test_case_count}</span>
+                                    <span><i class="far fa-clock"></i> 创建时间: ${batch.created_at}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                
+                batchesContainer.innerHTML = html;
+                
+                // 创建分页
+                UI.Pagination.create(
+                    paginationContainer, 
+                    batches.length, 
+                    itemsPerPage, 
+                    currentPage, 
+                    (page) => {
+                        currentPage = page;
+                        renderBatches(filteredBatches);
+                    }
+                );
+            };
+            
+            // 处理搜索、排序和筛选
+            const applyFilters = () => {
+                const query = searchInput.value;
+                const sortBy = sortSelect.value;
+                const activeFilter = document.querySelector('.filter-item.active').getAttribute('data-filter');
+                
+                // 应用搜索
+                let filtered = searchBatches(query);
+                
+                // 应用筛选
+                filtered = filterBatches(activeFilter);
+                
+                // 应用排序
+                filtered = sortBatches(filtered, sortBy);
+                
+                // 保存筛选后的批次
+                filteredBatches = filtered;
+                
+                // 重置分页
+                currentPage = 1;
+                
+                // 渲染批次
+                renderBatches(filtered);
+            };
+            
+            // 绑定搜索事件
+            searchInput.addEventListener('input', applyFilters);
+            
+            // 绑定排序事件
+            sortSelect.addEventListener('change', applyFilters);
+            
+            // 绑定筛选事件
+            filterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // 更新活动状态
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    
+                    // 应用筛选
+                    applyFilters();
+                });
+            });
+            
+            // 重载loadTestCaseBatches函数
+            window.loadTestCaseBatches = function() {
+                const batchesContainer = document.getElementById('batches-container');
+                
+                // 显示加载中
+                batchesContainer.innerHTML = `
+                    <div class="loader">
+                        <div></div><div></div><div></div><div></div>
+                    </div>
+                    <p class="text-center">加载中...</p>
+                `;
+                
+                // 请求批次列表
+                fetch('/api/testcase/batches')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('加载批次失败: ' + response.statusText);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // 保存批次数据
+                        batches = data;
+                        
+                        // 应用筛选
+                        applyFilters();
+                    })
+                    .catch(error => {
+                        console.error('加载批次失败:', error);
+                        batchesContainer.innerHTML = `<p class="text-center">加载批次失败: ${error.message}</p>`;
+                        
+                        // 显示错误通知
+                        UI.Toast.error('加载批次失败: ' + error.message);
+                    });
+            };
+            
+            // 初始化加载批次
+            loadTestCaseBatches();
+        });
+        
+        // 重写删除批次函数
+        function deleteBatch(batchId) {
+            UI.Modal.confirm(
+                '确定要删除此批次及其所有测试用例吗？此操作不可撤销。',
+                () => {
+                    // 显示加载动画
+                    UI.Loader.show('正在删除批次...');
+                    
+                    // 请求删除
+                    fetch(`/api/testcase/batch/${batchId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('删除失败: ' + response.statusText);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // 隐藏加载动画
+                        UI.Loader.hide();
+                        
+                        // 显示成功通知
+                        UI.Toast.success('批次已成功删除');
+                        
+                        // 重新加载批次列表
+                        loadTestCaseBatches();
+                    })
+                    .catch(error => {
+                        console.error('删除失败:', error);
+                        
+                        // 隐藏加载动画
+                        UI.Loader.hide();
+                        
+                        // 显示错误通知
+                        UI.Toast.error('删除失败: ' + error.message);
+                    });
+                },
+                null,
+                '确认删除'
+            );
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html> 
