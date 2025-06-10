@@ -1,8 +1,11 @@
 import os
 import requests
 import json
-import logging
 from app.config import get_config
+from app.utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger('dify_service')
 
 class DifyService:
     """Dify API服务，负责与Dify知识库交互"""
@@ -45,8 +48,7 @@ class DifyService:
             error_message += f", 响应内容: {response.text}"
         
         # 记录错误信息
-        logging.error(error_message)
-        print(error_message)
+        logger.error(error_message)
         
         return {"error": error_message}
             
@@ -94,8 +96,7 @@ class DifyService:
             return response.json()
         except requests.exceptions.RequestException as e:
             error_message = f"查询知识库失败: {str(e)}"
-            logging.error(error_message)
-            print(error_message)
+            logger.error(error_message)
             return {"error": error_message}
             
     def get_knowledge_files(self, page=1, limit=20, keyword=None):
@@ -134,8 +135,7 @@ class DifyService:
             return response.json()
         except requests.exceptions.RequestException as e:
             error_message = f"获取知识库文件列表失败: {str(e)}"
-            logging.error(error_message)
-            print(error_message)
+            logger.error(error_message)
             return {"error": error_message}
             
     def upload_file_to_knowledge_base(self, file_path, file_name=None, indexing_technique="high_quality", process_rule=None, embedding_model=None, embedding_model_provider=None):
@@ -194,9 +194,9 @@ class DifyService:
         data_dict["retrieval_model"] = retrieval_model
         
         # 记录请求信息（调试用）
-        logging.debug(f"上传文件到知识库，URL: {url}")
-        logging.debug(f"上传文件: {file_name}")
-        logging.debug(f"请求参数: {json.dumps(data_dict)}")
+        logger.debug(f"上传文件到知识库，URL: {url}")
+        logger.debug(f"上传文件: {file_name}")
+        logger.debug(f"请求参数: {json.dumps(data_dict)}")
             
         try:
             with open(file_path, 'rb') as f:
@@ -213,9 +213,9 @@ class DifyService:
                 response = requests.post(url, headers=headers, files=files)
                 
                 # 详细记录请求和响应信息（调试用）
-                logging.debug(f"请求头: {headers}")
-                logging.debug(f"响应状态码: {response.status_code}")
-                logging.debug(f"响应内容: {response.text}")
+                logger.debug(f"请求头: {headers}")
+                logger.debug(f"响应状态码: {response.status_code}")
+                logger.debug(f"响应内容: {response.text}")
                 
                 # 如果请求失败，使用辅助方法处理错误
                 if response.status_code != 200:
@@ -225,13 +225,11 @@ class DifyService:
                 return response.json()
         except requests.exceptions.RequestException as e:
             error_message = f"上传文件到知识库失败: {str(e)}"
-            logging.error(error_message)
-            print(error_message)
+            logger.error(error_message)
             return {"error": error_message}
         except Exception as e:
             error_message = f"处理文件上传时发生错误: {str(e)}"
-            logging.error(error_message)
-            print(error_message)
+            logger.error(error_message)
             return {"error": error_message}
             
     def delete_file_from_knowledge_base(self, document_id):
@@ -268,8 +266,7 @@ class DifyService:
                 return {"success": True}
         except requests.exceptions.RequestException as e:
             error_message = f"从知识库中删除文件失败: {str(e)}"
-            logging.error(error_message)
-            print(error_message)
+            logger.error(error_message)
             return {"error": error_message}
             
     def get_document_indexing_status(self, batch):
@@ -298,8 +295,7 @@ class DifyService:
             return response.json()
         except requests.exceptions.RequestException as e:
             error_message = f"获取文档嵌入状态失败: {str(e)}"
-            logging.error(error_message)
-            print(error_message)
+            logger.error(error_message)
             return {"error": error_message}
             
     def chat_with_knowledge_base_using_retrieve(self, message, conversation_id=None, top_k=3, search_method="semantic_search"):
@@ -385,5 +381,5 @@ if __name__ == "__main__":
     )
 
     # 输出结果
-    print("查询结果：")
-    print(json.dumps(result, indent=4, ensure_ascii=False))
+    logger.info("查询结果：")
+    logger.info(json.dumps(result, indent=4, ensure_ascii=False))

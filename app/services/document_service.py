@@ -123,7 +123,7 @@ class DocumentService:
 
                     # 无需手动删除文件，临时目录会自动清理
         except Exception as e:
-            print(f"PDF图片处理失败: {str(e)}")
+            logger.error(f"PDF图片处理失败: {str(e)}", exc_info=True)
 
         return text
 
@@ -188,9 +188,9 @@ class DocumentService:
 
                             # 无需手动删除文件，临时目录会自动清理
                         except Exception as e:
-                            print(f"DOCX图片处理失败 ({image_path}): {str(e)}")
+                            logger.error(f"DOCX图片处理失败 ({image_path}): {str(e)}", exc_info=True)
         except Exception as e:
-            print(f"DOCX图片提取失败: {str(e)}")
+            logger.error(f"DOCX图片提取失败: {str(e)}", exc_info=True)
 
         return text
 
@@ -297,15 +297,14 @@ class DocumentService:
             except Exception as e:
                 retry_count += 1
                 logger.warning(f"OCR处理失败 (尝试 {retry_count}/{max_retries}): {str(e)}", exc_info=True)
-                print(f"OCR处理失败 (尝试 {retry_count}/{max_retries}): {str(e)}")
                 if retry_count < max_retries:
                     # 等待一段时间后重试，使用全局导入的time模块
                     time.sleep(1)
                 else:
                     logger.error(f"OCR处理最终失败，已达到最大重试次数: {str(e)}", exc_info=True)
-                    print(f"OCR处理最终失败，已达到最大重试次数: {str(e)}")
                     return ""
         return None
+
     def split_text_for_context_window(self, text, max_tokens=4000, chunk_size=1000, chunk_overlap=200):
         """将文本分割为适合上下文窗口大小的块"""
         text_splitter = RecursiveCharacterTextSplitter(

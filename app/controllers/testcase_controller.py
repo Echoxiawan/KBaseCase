@@ -30,13 +30,13 @@ def _extract_knowledge_base_content(kb_results):
     
     # 检查kb_results是否为字典类型
     if not isinstance(kb_results, dict):
-        print("知识库返回结果格式错误：不是字典类型")
+        logger.warning("知识库返回结果格式错误：不是字典类型")
         return content_list
     
     # 从records字段中提取内容
     records = kb_results.get('records', [])
     if not records:
-        print("知识库返回结果中没有records字段或records为空")
+        logger.warning("知识库返回结果中没有records字段或records为空")
         return content_list
     
     # 遍历records，提取segment.content

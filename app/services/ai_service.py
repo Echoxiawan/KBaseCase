@@ -6,6 +6,10 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
 from langchain.schema.messages import HumanMessage
 from typing import List, Optional
+from ..utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger('ai_service')
 
 class AIService:
     """AI服务，负责生成测试用例"""
@@ -75,7 +79,7 @@ class AIService:
             return summary
             
         except Exception as e:
-            print(f"生成摘要失败: {str(e)}")
+            logger.error(f"生成摘要失败: {str(e)}", exc_info=True)
             # 失败时返回文档前200个字符
             return document_text[:max_length]
             
@@ -244,7 +248,7 @@ class AIService:
                 return {"error": "无法解析AI生成的测试用例JSON", "raw_content": content}
         
         except Exception as e:
-            print(f"调用AI API失败: {str(e)}")
+            logger.error(f"调用AI API失败: {str(e)}", exc_info=True)
             return {"error": str(e)}
 
     def _generate_dynamic_queries(self, document_text, base_queries=None):
@@ -298,7 +302,7 @@ class AIService:
                 queries = queries[:original_count] + queries[original_count:15]
                 
         except Exception as e:
-            print(f"动态生成查询关键词时出错: {str(e)}")
+            logger.error(f"动态生成查询关键词时出错: {str(e)}", exc_info=True)
             # 出错时返回基础查询关键词
             
         return queries 
@@ -413,7 +417,7 @@ class AIService:
         
         # 如果文档太长，需要进行处理
         if doc_tokens > max_available_tokens * 0.6:  # 如果文档占用超过可用token的60%，则处理
-            print(f"文档太长 ({doc_tokens} tokens)，进行长文档处理")
+            logger.info(f"文档太长 ({doc_tokens} tokens)，进行长文档处理")
             
             # 1. 动态生成查询关键词
             queries = self._generate_dynamic_queries(document_text)
@@ -470,14 +474,14 @@ class AIService:
                     reviewed_test_cases = json.loads(json_str)
                     return reviewed_test_cases
                 else:
-                    print("无法在评审响应中找到JSON格式的测试用例，返回原始测试用例")
+                    logger.info("无法在评审响应中找到JSON格式的测试用例，返回原始测试用例")
                     return test_cases
             except json.JSONDecodeError:
-                print(f"无法解析评审生成的测试用例JSON，返回原始测试用例")
+                logger.error(f"无法解析评审生成的测试用例JSON，返回原始测试用例")
                 return test_cases
                 
         except Exception as e:
-            print(f"测试用例评审失败: {str(e)}")
+            logger.error(f"测试用例评审失败: {str(e)}", exc_info=True)
             # 评审失败时返回原始测试用例
             return test_cases
             

@@ -1,10 +1,12 @@
 import json
 import os
 import shutil
-
 import requests
 from huggingface_hub import snapshot_download
+from app.utils.logger import get_logger
 
+# 获取日志记录器
+logger = get_logger('download_models')
 
 def download_json(url):
     # 下载JSON文件
@@ -51,8 +53,8 @@ if __name__ == '__main__':
     layoutreader_model_dir = snapshot_download('hantian/layoutreader', allow_patterns=layoutreader_pattern)
 
     model_dir = model_dir + '/models'
-    print(f'model_dir is: {model_dir}')
-    print(f'layoutreader_model_dir is: {layoutreader_model_dir}')
+    logger.info(f'model_dir is: {model_dir}')
+    logger.info(f'layoutreader_model_dir is: {layoutreader_model_dir}')
 
     # paddleocr_model_dir = model_dir + '/OCR/paddleocr'
     # user_paddleocr_dir = os.path.expanduser('~/.paddleocr')
@@ -71,4 +73,4 @@ if __name__ == '__main__':
     }
 
     download_and_modify_json(json_url, config_file, json_mods)
-    print(f'The configuration file has been configured successfully, the path is: {config_file}')
+    logger.info(f'The configuration file has been configured successfully, the path is: {config_file}')

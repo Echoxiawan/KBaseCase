@@ -3,6 +3,10 @@ from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from ..models import db, KnowledgeFile
 from ..services.dify_service import DifyService
+from ..utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger('knowledge_controller')
 
 knowledge_bp = Blueprint('knowledge', __name__, url_prefix='/api/knowledge')
 
@@ -49,16 +53,19 @@ def get_knowledge_files():
             
         return jsonify(result)
     except Exception as e:
+        logger.error(f"获取知识库文件列表失败: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @knowledge_bp.route('/upload', methods=['POST'])
 def upload_knowledge_file():
     """上传文件到知识库"""
     if 'file' not in request.files:
+        logger.warning("上传知识库文件失败: 没有文件")
         return jsonify({"error": "没有文件"}), 400
         
     file = request.files['file']
     if file.filename == '':
+        logger.warning("上传知识库文件失败: 没有选择文件")
         return jsonify({"error": "没有选择文件"}), 400
         
     # 创建上传目录
@@ -70,6 +77,8 @@ def upload_knowledge_file():
     filename = file.filename
     file_path = os.path.join(upload_folder, filename)
     file.save(file_path)
+    
+    logger.info(f"正在上传文件到知识库: {filename}")
     
     try:
         # 获取索引技术和处理规则参数
@@ -132,6 +141,7 @@ def upload_knowledge_file():
         
         # 检查是否上传成功
         if 'error' in result:
+            logger.error(f"上传文件到Dify知识库失败: {result['error']}")
             return jsonify(result), 500
             
         # 保存文件记录到数据库
@@ -153,6 +163,8 @@ def upload_knowledge_file():
         db.session.add(knowledge_file)
         db.session.commit()
         
+        logger.info(f"文件 {filename} 已成功上传到知识库，ID: {document.get('id')}")
+        
         return jsonify({
             "message": "文件已上传到知识库",
             "file": knowledge_file.to_dict(),
@@ -162,7 +174,7 @@ def upload_knowledge_file():
     except Exception as e:
         db.session.rollback()
         error_message = f"上传文件失败: {str(e)}"
-        print(error_message)
+        logger.error(error_message, exc_info=True)
         return jsonify({"error": error_message}), 500
     finally:
         # 清理上传的文件
@@ -173,6 +185,8 @@ def upload_knowledge_file():
 def delete_knowledge_file(file_id):
     """从知识库中删除文件"""
     try:
+        logger.info(f"正在从知识库中删除文件，ID: {file_id}")
+        
         # 从Dify知识库删除
         dify_service = DifyService()
         result = dify_service.delete_file_from_knowledge_base(file_id)
@@ -180,8 +194,12 @@ def delete_knowledge_file(file_id):
         # 删除本地数据库记录
         knowledge_file = KnowledgeFile.query.filter_by(dify_file_id=file_id).first()
         if knowledge_file:
+            file_name = knowledge_file.file_name
             db.session.delete(knowledge_file)
             db.session.commit()
+            logger.info(f"文件 {file_name} (ID: {file_id}) 已从知识库和数据库中删除")
+        else:
+            logger.warning(f"文件 ID: {file_id} 在本地数据库中不存在")
             
         return jsonify({
             "message": "文件已从知识库中删除",
@@ -189,14 +207,17 @@ def delete_knowledge_file(file_id):
         })
     except Exception as e:
         db.session.rollback()
+        logger.error(f"删除知识库文件失败，ID: {file_id}, 错误: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
         
 @knowledge_bp.route('/status/<string:batch>', methods=['GET'])
 def get_indexing_status(batch):
     """获取文档索引状态"""
     try:
+        logger.debug(f"正在查询索引状态，批次: {batch}")
         dify_service = DifyService()
         result = dify_service.get_document_indexing_status(batch)
         return jsonify(result)
     except Exception as e:
+        logger.error(f"获取索引状态失败，批次: {batch}, 错误: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500 
